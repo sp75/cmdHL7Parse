@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace cmdHL7Parse
 {
@@ -13,41 +14,229 @@ namespace cmdHL7Parse
 
         static Dictionary<String, String[]> config = new Dictionary<string, String[]>();
 
-        private static void Main(string[] args)
+        private static void Main( string[] args )
         {
-            Console.WriteLine("*** HL7 Parse utility ***");
-            foreach (var s in args)
+
+            Console.WriteLine( "*** HL7 Parse utility ***" );
+            foreach ( var s in args )
             {
-                Console.WriteLine(s);
+                Console.WriteLine( s );
             }
 
-            if (!args.Any())
+            if ( !args.Any() )
             {
-                Console.WriteLine("ERROR: You must specify full path to HL7 files!");
+                Console.WriteLine( "ERROR: You must specify full path to HL7 files!" );
                 return;
             }
 
-            if (!File.Exists(args[0]))
+            if ( !File.Exists( args[ 0 ] ) )
             {
-                Console.WriteLine("ERROR: File {0} doesn't exist", args[0]);
+                Console.WriteLine( "ERROR: File {0} doesn't exist", args[ 0 ] );
                 return;
             }
 
-            if (!File.Exists("config.ini"))
+            if ( !File.Exists( "config.ini" ) )
             {
-                Console.WriteLine("ERROR: File config.ini doesn't exist");
+                Console.WriteLine( "ERROR: File config.ini doesn't exist" );
                 return;
             }
-            FileName = args[0];
+            FileName = args[ 0 ];
 
-        //       FileName = "RPRresult.exp";
+          //      FileName = "RPRresult(1).exp";
 
-            listmsg = GetMSG(FileName);
+            var dd = HL7.ParseMSG(FileName);
+            GetDataFromHistory3( dd );
+            GetData3( dd );
+
+            Console.WriteLine( "" );
+            Console.WriteLine( "The utility has finished its work" );
+
+
+            /*
+             listmsg = GetMSG(FileName);
             GetDataFromHistory();
             GetData2();
+             */
+        }
 
-            Console.WriteLine("");
-            Console.WriteLine("The utility has finished its work");
+        private static void GetDataFromHistory3(List<MSG> msg)
+        {
+            if (!File.Exists("History.hl7")) return;
+
+            string[] configLines = File.ReadAllLines("History.hl7");
+            int a = 0, countMsg = configLines.Count(), pr = 0;
+
+            foreach (string cline in configLines)
+            {
+                if (!String.IsNullOrEmpty(cline))
+                {
+                    string[] clinesplit = cline.Split('|');
+                    if (clinesplit[1].IndexOf('^') > 0)
+                        CheckOtherResults2(msg,
+                            clinesplit[0],
+                            clinesplit[1].Remove(0, clinesplit[1].IndexOf('^')).Split('^'),
+                            clinesplit[1], new string[] { });
+                }
+
+                int d = 100 * ++a / countMsg;
+
+                if (d != pr)
+                {
+                    Console.WriteLine(d + "%");
+                    pr = d;
+                }
+            }
+        }
+
+        private static void GetData3( List<MSG> msg )
+        {
+            int a = 0, countMsg = msg.Count, pr = 0;
+
+            string[] configLines = File.ReadAllLines( "config.ini" );
+
+            foreach ( var msg_item in msg )
+            {
+                string[] p_name = msg_item.PID_split[ 5 ].Split( '^' );
+
+                int y = !String.IsNullOrEmpty( msg_item.PID_split[ 7 ] )
+                    ? CalculateAge(
+                        DateTime.ParseExact( msg_item.PID_split[ 7 ], "yyyyMMdd", CultureInfo.InvariantCulture ),
+                        DateTime.Now )
+                    : 150;
+
+                if ( p_name.Count() >= 2 )
+                {
+                    String f_name = p_name[ 0 ].Trim();
+                    String l_name = p_name[ 1 ].Trim();
+                    var r = new Regex( @"\d+" ); // если в имени нет числа то обрабатываем
+                    if ( !r.IsMatch( f_name ) && !r.IsMatch( l_name ) && !f_name.ToLower().Contains( "proficiency" ) &&
+                         !l_name.ToLower().Contains( "proficiency" ) )
+                    {
+
+                        foreach ( var obr_item in msg_item.OBRs )
+                        {
+                            foreach ( var zlr_item in obr_item.ZLRs )
+                            {
+                                foreach ( var obx_item in zlr_item.OBXs )
+                                {
+                                    var test = obx_item.OBX_split_heder[ 3 ].Split( '^' )[ 0 ];
+
+                                    foreach ( string line in configLines )
+                                    {
+                                        if ( !String.IsNullOrEmpty( line ) )
+                                        {
+                                            string[] clinesplit = line.Split( '|' );
+                                            string[] configkay = clinesplit[ 0 ].Split( '^' );
+                                            int config_year = clinesplit.Count() > 2
+                                                ? Convert.ToInt32( clinesplit[ 2 ] )
+                                                : -1;
+                                            if ( configkay[ 0 ] == test &&
+                                                 configkay[ 1 ] == obx_item.OBX_split_heder[ 8 ] &&
+                                                 ( config_year == -1 || y <= config_year ) )
+                                            {
+                                                CheckOtherResults2( msg,
+                                                    msg_item.PID_split[ 2 ],
+                                                    clinesplit[ 1 ].Split( '^' ),
+                                                    clinesplit[ 1 ],
+                                                    clinesplit );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                int d = 100*++a/countMsg;
+
+                if ( d != pr )
+                {
+                    Console.WriteLine( d + "%" );
+                    pr = d;
+                }
+            }
+
+        }
+
+        static void CheckOtherResults2(List<MSG> msg, string pid, string[] Tests, string test, string[] confog_line)
+        {
+            string[] p_4 = confog_line[3].Split('^');
+
+            foreach ( var msg_item in msg )
+            {
+                if ( msg_item.PID_split[ 2 ] == pid )
+                {
+                    bool pt = PregnancyTest( p_4, msg_item.OBRs );
+
+                    foreach ( var obr_item in msg_item.OBRs )
+                    {
+                        if (pt)
+                        {
+                            obr_item.OBR_split[13] = "PROBABLE PREGNANCY";
+                            obr_item.OBR_line = String.Join("|", obr_item.OBR_split);
+                        }
+
+                        foreach ( var zlr_item in obr_item.ZLRs )
+                        {
+                            String logobx = "";
+                            foreach (var obx_item in zlr_item.OBXs)
+                            {
+                                string[] ObservationIdentifier = obx_item.OBX_split_heder[3].Split('^');
+                                String id_test = ObservationIdentifier[0];
+                                
+                                if (Tests.Contains(id_test))
+                                {
+                                    String oi_1 = ObservationIdentifier[0];
+                                    String oi_4 = ObservationIdentifier[3];
+
+                                    String oi_3 = ObservationIdentifier[2];
+                                    String oi_6 = ObservationIdentifier[5];
+                                    ObservationIdentifier[0] = oi_4;
+                                    ObservationIdentifier[3] = oi_1;
+
+                                    ObservationIdentifier[2] = oi_6;
+                                    ObservationIdentifier[5] = oi_3;
+                                    obx_item.OBX_split_heder[3] = String.Join("^", ObservationIdentifier);
+
+                                    logobx += String.Join("|", obx_item.OBX_split_heder) + Environment.NewLine;
+                                }
+                             
+                            }
+
+                            if ( logobx.Length > 0 )
+                            {
+                                String msgstr = msg_item.MSH_line + Environment.NewLine + msg_item.PID_line +
+                                                Environment.NewLine + obr_item.OBR_line + Environment.NewLine +
+                                                zlr_item.ZLR_heder + Environment.NewLine + logobx;
+
+                                string[] address = msg_item.PID_split[ 11 ].Split( new char[] { '^' },
+                                    StringSplitOptions.RemoveEmptyEntries );
+                                if ( address.Length < 4 )
+                                    errlog( msgstr );
+
+                                log( msgstr );
+
+                                Historylog( msg_item.PID_split[ 2 ] + "|" + test );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        static bool PregnancyTest(string[] confog_line, List<OBR> OBRs)
+        {
+            bool result = ( confog_line.Count() > 0 );
+
+            foreach ( var test in confog_line )
+            {
+                if ( result )
+                {
+                    result = OBRs.Select( s => s.OBR_split[ 4 ].Split( '^' )[ 0 ] ).ToArray().Contains( test );
+                }
+            }
+            return result;
         }
 
         static List<String> GetMSG(String FileName)
@@ -206,7 +395,6 @@ namespace cmdHL7Parse
             }
         }
 
-
         static void GetData2()
         {
         //    listmsg = GetMSG(FileName);
@@ -305,7 +493,7 @@ namespace cmdHL7Parse
                                     obxItem += obxS[i][b] + "|";
                                 }
 
-                                logobx += obxItem.Substring(0, obxItem.LastIndexOf('|')) + Environment.NewLine; //msg["strOBX"][i][0] + Environment.NewLine;
+                                logobx += obxItem.Substring(0, obxItem.LastIndexOf('|')) + Environment.NewLine;
                             }
                         }
 
@@ -349,7 +537,6 @@ namespace cmdHL7Parse
             }
         }
 
-
         static void log(string msg)
         {
             string path = Directory.GetCurrentDirectory();
@@ -371,6 +558,13 @@ namespace cmdHL7Parse
             sw.Close();
 
             Console.Write('E');
+        }
+
+        static int CalculateAge(DateTime birthDate, DateTime now)
+        {
+            int age = now.Year - birthDate.Year;
+            if (now.Month < birthDate.Month || (now.Month == birthDate.Month && now.Day < birthDate.Day)) age--;
+            return age;
         }
     }
 }

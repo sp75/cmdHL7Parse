@@ -1,2 +1,2 @@
-cmdHL7Parse.exe hcv.exp
+cmdHL7Parse.exe RPRresult(1).exp
 pause
