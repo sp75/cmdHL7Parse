@@ -7,25 +7,15 @@ using System.Globalization;
 
 namespace cmdHL7Parse
 {
-    public class resultLog
-    {
-        public String MSH;
-        public String PID;
-        public String OBR;
-        public String ZLR;
-        public String OBX;
-        public string[] confog_line;
-    }
+
     class Program
     {
         static string FileName;
-     
-        static List<resultLog> dd = new List<resultLog>();
 
         private static void Main( string[] args )
         {
 
-         /*   Console.WriteLine( "*** HL7 Parse utility ***" );
+            Console.WriteLine( "*** HL7 Parse utility ***" );
             foreach ( var s in args )
             {
                 Console.WriteLine( s );
@@ -48,37 +38,18 @@ namespace cmdHL7Parse
                 Console.WriteLine( "ERROR: File config.ini doesn't exist" );
                 return;
             }
-            FileName = args[ 0 ];*/
+            FileName = args[ 0 ];
 
-            FileName = "RPRresult_for testing probable pregnancy.exp";
+            //    FileName = "RPRresult_for testing probable pregnancy.exp";
 
-
-            var dd = HL7.ParseMSG(FileName);
-            GetDataFromHistory3( dd );
-            GetData3( dd );
-            CheckedPregnancy();
-            //PrintLog();
+            var dd = HL7.ParseMSG( FileName );
+            GetDataFromHistory( dd );
+            GetData( dd );
 
             Console.WriteLine( "" );
             Console.WriteLine( "The utility has finished its work" );
-
-
-            /*
-             listmsg = GetMSG(FileName);
-            GetDataFromHistory();
-            GetData2();
-             */
         }
 
-        private static void CheckedPregnancy()
-        {
-            foreach(var item in dd)
-            {
-                bool pt = confog_line.Count() == 4
-                      ? PregnancyTest(confog_line[3].Split('^'), msg_item.OBRs)
-                      : false;
-            }
-        }
 
         private static string[] GetConfig()
         {
@@ -88,7 +59,7 @@ namespace cmdHL7Parse
                     .ToArray();
         }
 
-        private static void GetDataFromHistory3(List<MSG> msg)
+        private static void GetDataFromHistory(List<MSG> msg)
         {
             if (!File.Exists("History.hl7")) return;
 
@@ -117,12 +88,11 @@ namespace cmdHL7Parse
             }
         }
 
-        static List<String> _obx = new List<string>();
-        private static void GetData3( List<MSG> msg )
+        static List<string> _obx = new List<string>();
+        private static void GetData( List<MSG> msg )
         {
             int a = 0, countMsg = msg.Count, pr = 0;
 
-        //    string[] configLines = File.ReadAllLines( "config.ini" );
             var configLines = GetConfig();
 
             foreach ( var msg_item in msg )
@@ -193,6 +163,7 @@ namespace cmdHL7Parse
         static void CheckOtherResults2(List<MSG> msg, string pid, string[] Tests, string test, string[] confog_line)
         {
             string key = confog_line.Any() ? confog_line[0].Split('^')[0] : "";
+            var keys = GetConfig().Select( s => s.Split( '|' )[ 0 ].Split( '^' )[ 0 ] ).ToArray();
             foreach ( var msg_item in msg )
             {
                 if ( msg_item.PID_split[ 2 ] == pid )
@@ -203,45 +174,42 @@ namespace cmdHL7Parse
 
                     foreach (var obr_item in msg_item.OBRs)
                     {
-
-
                         foreach (var zlr_item in obr_item.ZLRs)
                         {
                             String logobx = "";
-                            foreach (var obx_item in zlr_item.OBXs)
+                            foreach ( var obx_item in zlr_item.OBXs )
                             {
-                                string[] ObservationIdentifier = obx_item.OBX_split_heder[3].Split('^');
-                                String id_test = ObservationIdentifier[0];
+                                string[] ObservationIdentifier = obx_item.OBX_split_heder[ 3 ].Split( '^' );
+                                String id_test = ObservationIdentifier[ 0 ];
 
-                                if (pt && id_test == key) //
+                                if ( pt && keys.Contains( id_test ) ) //
                                 {
-                                    obr_item.OBR_split[13] = "PROBABLE PREGNANCY";
-                                    obr_item.OBR_line = String.Join("|", obr_item.OBR_split);
+                                    obr_item.OBR_split[ 13 ] = "PROBABLE PREGNANCY";
+                                    obr_item.OBR_line = String.Join( "|", obr_item.OBR_split );
                                 }
                                 var tmp_ = obx_item.OBX_split_heder.ToArray();
-                                if (Tests.Contains(id_test))
+                                if ( Tests.Contains( id_test ) )
                                 {
-                                    String oi_1 = ObservationIdentifier[0];
-                                    String oi_4 = ObservationIdentifier[3];
+                                    String oi_1 = ObservationIdentifier[ 0 ];
+                                    String oi_4 = ObservationIdentifier[ 3 ];
 
-                                    String oi_3 = ObservationIdentifier[2];
-                                    String oi_6 = ObservationIdentifier[5];
-                                    ObservationIdentifier[0] = oi_4;
-                                    ObservationIdentifier[3] = oi_1;
+                                    String oi_3 = ObservationIdentifier[ 2 ];
+                                    String oi_6 = ObservationIdentifier[ 5 ];
+                                    ObservationIdentifier[ 0 ] = oi_4;
+                                    ObservationIdentifier[ 3 ] = oi_1;
 
-                                    ObservationIdentifier[2] = oi_6;
-                                    ObservationIdentifier[5] = oi_3;
+                                    ObservationIdentifier[ 2 ] = oi_6;
+                                    ObservationIdentifier[ 5 ] = oi_3;
                                     /* obx_item.OBX_split_heder[3]*/
-                                    tmp_[3] = String.Join("^", ObservationIdentifier);
+                                    tmp_[ 3 ] = String.Join( "^", ObservationIdentifier );
 
-                                    if (!_obx.Contains(id_test))
+                                    if ( !_obx.Contains( id_test ) )
                                     {
-                                        logobx += String.Join("|", /*obx_item.OBX_split_heder*/tmp_) +
+                                        logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ) +
                                                   Environment.NewLine;
-                                        _obx.Add(id_test);
+                                        _obx.Add( id_test );
                                     }
                                 }
-
                             }
 
                             if (logobx.Length > 0)
@@ -249,10 +217,6 @@ namespace cmdHL7Parse
                                 String msgstr = msg_item.MSH_line + Environment.NewLine + msg_item.PID_line +
                                                 Environment.NewLine + obr_item.OBR_line + Environment.NewLine +
                                                 zlr_item.ZLR_heder + Environment.NewLine + logobx;
-
-                                var f = new resultLog() { MSH = msg_item.MSH_line, PID = msg_item.PID_line, OBR = obr_item.OBR_line, ZLR = zlr_item.ZLR_heder, OBX = logobx, confog_line = confog_line };
-
-                                dd.Add(f);
 
                                 string[] address = msg_item.PID_split[11].Split(new char[] { '^' },
                                     StringSplitOptions.RemoveEmptyEntries);
@@ -262,7 +226,6 @@ namespace cmdHL7Parse
                                 log(msgstr);
 
                                 Historylog(msg_item.PID_split[2] + "|" + test);
-
                             }
                         }
                     }

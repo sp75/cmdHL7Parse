@@ -1,2 +1,2 @@
-cmdHL7Parse.exe RPRresult(1).exp
+ cmdHL7Parse.exe RPRresult_fortesting_probable_pregnancy.exp
 pause
