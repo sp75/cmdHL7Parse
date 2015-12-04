@@ -118,7 +118,7 @@ namespace cmdHL7Parse
                         {
                             foreach (var line in Config())
                             {
-                                var h = history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key && w.delete == false);
+                                var h = history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key && w.abnormal_flag == line.flag && w.delete == false);
 
                                 if (((line.key == obx_item.obx_id && line.flag == obx_item.abnormal_flag) || h.Any()) && (line.year_limit == -1 || msg_item.pid_year <= line.year_limit))
                                 {
