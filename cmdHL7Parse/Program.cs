@@ -7,6 +7,16 @@ using System.Globalization;
 
 namespace cmdHL7Parse
 {
+    public class ConfigParse
+    {
+        public String key { get; set; }
+        public String flag { get; set; }
+        public String[] extension_test { get; set; }
+        public bool any_test { get; set; }
+        public int year_limit { get; set; }
+        public String[] PregnancyTest { get; set; }
+    }
+
 
     class Program
     {
@@ -40,10 +50,10 @@ namespace cmdHL7Parse
             }
             FileName = args[ 0 ];
 
-            //    FileName = "RPRresult_for testing probable pregnancy.exp";
-
+      //     FileName = "rprresult_201519Th_080030 - копия.exp";
+       //     FileName = "rprresult_201520Fr_080032 - копия.exp";
             var dd = HL7.ParseMSG( FileName );
-            GetDataFromHistory( dd );
+    //        GetDataFromHistory( dd );
             GetData( dd );
 
             Console.WriteLine( "" );
@@ -59,24 +69,66 @@ namespace cmdHL7Parse
                     .ToArray();
         }
 
-        private static void GetDataFromHistory(List<MSG> msg)
+        private static List<ConfigParse> Config()
         {
-            if (!File.Exists("History.hl7")) return;
-
-            string[] configLines = File.ReadAllLines("History.hl7");
-            int a = 0, countMsg = configLines.Count(), pr = 0;
-
-            foreach (string cline in configLines)
+            var result = new List<ConfigParse>();
+            foreach (var line in File.ReadAllLines("config.ini").Where(s => !String.IsNullOrEmpty(s)).Where(s => s.Trim()[0] != ';').ToArray())
             {
-                if (!String.IsNullOrEmpty(cline))
+                var config_line = new ConfigParse();
+
+                string[] cline_split = line.Split('|');
+                string[] configkay = cline_split[0].Split('^');
+                
+                config_line.key = configkay[0];
+                config_line.flag = configkay[1];
+                config_line.extension_test = cline_split[1].Contains('^') ? cline_split[1].Split('^') : cline_split[1].Split('#');
+                config_line.any_test = cline_split[1].Contains('^');
+                config_line.year_limit = cline_split.Count() > 2 ? Convert.ToInt32(cline_split[2]) : -1;
+                config_line.PregnancyTest = cline_split.Count() == 4 ? cline_split[3].Split('^') : new string[] { };
+                
+                result.Add(config_line);
+            }
+
+            return result;
+        }
+
+        static List<string> _obx = new List<string>();
+        static List<string> temp_log = new List<string>();
+        static List<H_MSG> history = History.ParseMSG("History.hl7");
+        private static void GetData(List<MSG> msg)
+        {
+            int a = 0, countMsg = msg.Count, pr = 0;
+
+        /*    foreach (var line in Config())
+            {
+                var test = msg.Where(w => w.bad_pid_name == false && w.OBRs.)
+            }*/
+
+
+            foreach (var msg_item in msg.Where(w => w.bad_pid_name == false))
+            {
+                _obx.Clear();
+                temp_log.Clear();
+
+                foreach (var obr_item in msg_item.OBRs)
                 {
-                    string[] clinesplit = cline.Split('|');
-                    if (clinesplit[1].IndexOf('^') > 0)
-                        CheckOtherResults2(msg,
-                            clinesplit[0],
-                            clinesplit[1].Remove(0, clinesplit[1].IndexOf('^')).Split('^'),
-                            clinesplit[1], new string[] { });
+                    foreach (var zlr_item in obr_item.ZLRs)
+                    {
+                        foreach (var obx_item in zlr_item.OBXs)
+                        {
+                            foreach (var line in Config())
+                            {
+                                var h = history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key && w.delete == false);
+
+                                if (((line.key == obx_item.obx_id && line.flag == obx_item.abnormal_flag) || h.Any()) && (line.year_limit == -1 || msg_item.pid_year <= line.year_limit))
+                                {
+                                    CheckResults(msg, msg_item.pid_id, line, history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key));
+                                }
+                            }
+                        }
+                    }
                 }
+
 
                 int d = 100 * ++a / countMsg;
 
@@ -86,150 +138,97 @@ namespace cmdHL7Parse
                     pr = d;
                 }
             }
+
+            Historylog(String.Join(Environment.NewLine, history.Where(w => w.delete == false).Select(s => s.MSH_Block).ToArray()));
         }
 
-        static List<string> _obx = new List<string>();
-        private static void GetData( List<MSG> msg )
+
+        static void CheckResults(List<MSG> msg, string pid, ConfigParse config_line, IEnumerable<H_MSG> _history)
         {
-            int a = 0, countMsg = msg.Count, pr = 0;
+            var keys = GetConfig().Select( s => s.Split( '|' )[ 0 ].Split( '^' )[ 0 ] ).ToArray();
 
-            var configLines = GetConfig();
-
-            foreach ( var msg_item in msg )
-            {
-                _obx.Clear();
-                string[] p_name = msg_item.PID_split[ 5 ].Split( '^' );
-
-                int y = !String.IsNullOrEmpty( msg_item.PID_split[ 7 ] )
-                    ? CalculateAge(
-                        DateTime.ParseExact( msg_item.PID_split[ 7 ], "yyyyMMdd", CultureInfo.InvariantCulture ),
-                        DateTime.Now )
-                    : 150;
-
-                if ( p_name.Count() >= 2 )
+            for (int i = 0; i < _history.Count(); ++i)
                 {
-                    String f_name = p_name[ 0 ].Trim();
-                    String l_name = p_name[ 1 ].Trim();
-                    var r = new Regex( @"\d+" ); // если в имени нет числа то обрабатываем
-                    if ( !r.IsMatch( f_name ) && !r.IsMatch( l_name ) && !f_name.ToLower().Contains( "proficiency" ) &&
-                         !l_name.ToLower().Contains( "proficiency" ) )
+                    temp_log.Add(_history.ElementAt(i).MSH_Block);
+                    _history.ElementAt(i).delete = true;
+                }
+           
+
+            foreach (var msg_item in msg.Where(w => w.pid_id == pid))
+            {
+                bool pt = PregnancyTest(config_line.PregnancyTest, msg_item.OBRs);
+
+                foreach (var obr_item in msg_item.OBRs)
+                {
+                    foreach (var zlr_item in obr_item.ZLRs)
                     {
-
-                        foreach ( var obr_item in msg_item.OBRs )
+                        String logobx = "";
+                        foreach (var obx_item in zlr_item.OBXs)
                         {
-                            foreach ( var zlr_item in obr_item.ZLRs )
+                            string[] ObservationIdentifier = obx_item.OBX_split_heder[3].Split('^');
+
+                            String id_test = obx_item.obx_id;
+
+                            if (pt && keys.Contains(id_test)) //
                             {
-                                foreach ( var obx_item in zlr_item.OBXs )
+                                obr_item.OBR_split[13] = "PROBABLE PREGNANCY";
+                                obr_item.OBR_line = String.Join("|", obr_item.OBR_split);
+                            }
+
+                            var tmp_ = obx_item.OBX_split_heder.ToArray();
+                            if (config_line.extension_test.Contains(id_test))
+                            {
+                                String oi_1 = ObservationIdentifier[0];
+                                String oi_4 = ObservationIdentifier[3];
+
+                                String oi_3 = ObservationIdentifier[2];
+                                String oi_6 = ObservationIdentifier[5];
+                                ObservationIdentifier[0] = oi_4;
+                                ObservationIdentifier[3] = oi_1;
+
+                                ObservationIdentifier[2] = oi_6;
+                                ObservationIdentifier[5] = oi_3;
+                                /* obx_item.OBX_split_heder[3]*/
+                                tmp_[3] = String.Join("^", ObservationIdentifier);
+
+                                if (!_obx.Contains(id_test))
                                 {
-                                    var test = obx_item.OBX_split_heder[ 3 ].Split( '^' )[ 0 ];
-
-                                    foreach ( string line in configLines )
-                                    {
-
-                                        string[] clinesplit = line.Split( '|' );
-                                        string[] configkay = clinesplit[ 0 ].Split( '^' );
-                                        int config_year = clinesplit.Count() > 2
-                                            ? Convert.ToInt32( clinesplit[ 2 ] )
-                                            : -1;
-                                        if ( configkay[ 0 ] == test &&
-                                             configkay[ 1 ] == obx_item.OBX_split_heder[ 8 ] &&
-                                             ( config_year == -1 || y <= config_year ) )
-                                        {
-                                            CheckOtherResults2( msg,
-                                                msg_item.PID_split[ 2 ],
-                                                clinesplit[ 1 ].Split( '^' ),
-                                                clinesplit[ 1 ],
-                                                clinesplit );
-                                        }
-
-                                    }
+                                    logobx += String.Join("|", /*obx_item.OBX_split_heder*/tmp_) +
+                                              Environment.NewLine;
+                                    _obx.Add(id_test);
                                 }
                             }
                         }
+
+                        if (logobx.Length > 0)
+                        {
+                            String msgstr = msg_item.MSH_line + Environment.NewLine + msg_item.PID_line +
+                                            Environment.NewLine + obr_item.OBR_line + Environment.NewLine +
+                                            zlr_item.ZLR_heder + Environment.NewLine + logobx;
+
+                            string[] address = msg_item.PID_split[11].Split(new char[] { '^' },
+                                StringSplitOptions.RemoveEmptyEntries);
+                            if (address.Length < 4)
+                                errlog(msgstr);
+
+                            //log(msgstr);
+                            temp_log.Add(msgstr);
+
+                            //      Historylog(msg_item.PID_split[2] + "|" + test);
+                        }
                     }
-                }
-
-                int d = 100*++a/countMsg;
-
-                if ( d != pr )
-                {
-                    Console.WriteLine( d + "%" );
-                    pr = d;
                 }
             }
 
-        }
+            var str = String.Join(Environment.NewLine, temp_log.ToArray());
 
-        static void CheckOtherResults2(List<MSG> msg, string pid, string[] Tests, string test, string[] confog_line)
-        {
-            string key = confog_line.Any() ? confog_line[0].Split('^')[0] : "";
-            var keys = GetConfig().Select( s => s.Split( '|' )[ 0 ].Split( '^' )[ 0 ] ).ToArray();
-            foreach ( var msg_item in msg )
+            if (temp_log.Count() != config_line.extension_test.Count() && !config_line.any_test)
             {
-                if ( msg_item.PID_split[ 2 ] == pid )
-                {
-                    bool pt = confog_line.Count() == 4
-                        ? PregnancyTest( confog_line[ 3 ].Split( '^' ), msg_item.OBRs )
-                        : false;
-
-                    foreach (var obr_item in msg_item.OBRs)
-                    {
-                        foreach (var zlr_item in obr_item.ZLRs)
-                        {
-                            String logobx = "";
-                            foreach ( var obx_item in zlr_item.OBXs )
-                            {
-                                string[] ObservationIdentifier = obx_item.OBX_split_heder[ 3 ].Split( '^' );
-                                String id_test = ObservationIdentifier[ 0 ];
-
-                                if ( pt && keys.Contains( id_test ) ) //
-                                {
-                                    obr_item.OBR_split[ 13 ] = "PROBABLE PREGNANCY";
-                                    obr_item.OBR_line = String.Join( "|", obr_item.OBR_split );
-                                }
-                                var tmp_ = obx_item.OBX_split_heder.ToArray();
-                                if ( Tests.Contains( id_test ) )
-                                {
-                                    String oi_1 = ObservationIdentifier[ 0 ];
-                                    String oi_4 = ObservationIdentifier[ 3 ];
-
-                                    String oi_3 = ObservationIdentifier[ 2 ];
-                                    String oi_6 = ObservationIdentifier[ 5 ];
-                                    ObservationIdentifier[ 0 ] = oi_4;
-                                    ObservationIdentifier[ 3 ] = oi_1;
-
-                                    ObservationIdentifier[ 2 ] = oi_6;
-                                    ObservationIdentifier[ 5 ] = oi_3;
-                                    /* obx_item.OBX_split_heder[3]*/
-                                    tmp_[ 3 ] = String.Join( "^", ObservationIdentifier );
-
-                                    if ( !_obx.Contains( id_test ) )
-                                    {
-                                        logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ) +
-                                                  Environment.NewLine;
-                                        _obx.Add( id_test );
-                                    }
-                                }
-                            }
-
-                            if (logobx.Length > 0)
-                            {
-                                String msgstr = msg_item.MSH_line + Environment.NewLine + msg_item.PID_line +
-                                                Environment.NewLine + obr_item.OBR_line + Environment.NewLine +
-                                                zlr_item.ZLR_heder + Environment.NewLine + logobx;
-
-                                string[] address = msg_item.PID_split[11].Split(new char[] { '^' },
-                                    StringSplitOptions.RemoveEmptyEntries);
-                                if (address.Length < 4)
-                                    errlog(msgstr);
-
-                                log(msgstr);
-
-                                Historylog(msg_item.PID_split[2] + "|" + test);
-                            }
-                        }
-                    }
-                }
+                history.Add(new H_MSG() { MSH_Block = str, delete = false });
+            }
+            else
+            {
+                log(str);
             }
         }
 
@@ -253,8 +252,11 @@ namespace cmdHL7Parse
         {
             string path = Directory.GetCurrentDirectory();
             string fileNameHistory = Path.Combine(path, "History.hl7");
+            StreamWriter sw = new StreamWriter(fileNameHistory, false);
+            sw.WriteLine(msg);
+            sw.Close();
 
-            if (File.Exists(fileNameHistory))
+          /*  if (File.Exists(fileNameHistory))
             {
                 if (!File.ReadAllLines(fileNameHistory).Contains(msg))
                 {
@@ -268,7 +270,7 @@ namespace cmdHL7Parse
                 StreamWriter sw = new StreamWriter(fileNameHistory, true);
                 sw.WriteLine(msg);
                 sw.Close();
-            }
+            }*/
         }
 
         static void log(string msg)
@@ -295,11 +297,6 @@ namespace cmdHL7Parse
             Console.Write('E');
         }
 
-        static int CalculateAge(DateTime birthDate, DateTime now)
-        {
-            int age = now.Year - birthDate.Year;
-            if (now.Month < birthDate.Month || (now.Month == birthDate.Month && now.Day < birthDate.Day)) age--;
-            return age;
-        }
+
     }
 }

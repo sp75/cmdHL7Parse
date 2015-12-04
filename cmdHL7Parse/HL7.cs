@@ -1,18 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace cmdHL7Parse
 {
     public class MSG
     {
-        public String MSH_line { get; set; }
+        public string MSH_line { get; set; }
         public string[] MSH_split { get; set; }
-        public String PID_line { get; set; }
+        public string PID_line { get; set; }
         public string[] PID_split { get; set; }
+        public string pid_id { get; set; }
+        public int pid_year { get; set; }
         public List<OBR> OBRs { get; set; }
+        public bool bad_pid_name { get; set; }
         public MSG()
         {
             OBRs = new List<OBR>();
@@ -48,35 +53,37 @@ namespace cmdHL7Parse
     {
         public String OBX_heder { get; set; }
         public string[] OBX_split_heder { get; set; }
+        public string abnormal_flag { get; set; }
+        public string obx_id { get; set; }
     }
 
     public static class HL7
     {
-
         public static List<MSG>  ParseMSG(String FileName)
         {
             var msg_list = new List<MSG>();
 
-            string text = File.ReadAllText(FileName);
-
-
-            var MSG_lines = GetBlock(text, "MSH");
-
-            foreach (var MSG in MSG_lines)
+            if (File.Exists(FileName))
             {
-                var _msg = new MSG();
-                GetMSH(_msg, MSG);
+                var MSG_lines = GetBlock(File.ReadAllText(FileName), "MSH");
 
-               
+                foreach (var MSG in MSG_lines)
+                {
+                //    var _msg = new MSG();
+                    var _msg = GetMSH(MSG);
 
-                msg_list.Add(_msg);
+                    msg_list.Add(_msg);
+                }
             }
 
             return msg_list;
         }
 
-        private static void GetMSH(MSG _msg, string MSG)
+        private static MSG GetMSH(string MSG)
         {
+            MSG _msg = new MSG();
+            _msg.bad_pid_name = true;
+
             using (StringReader reader = new StringReader(MSG))
             {
                 string line;
@@ -88,15 +95,31 @@ namespace cmdHL7Parse
                     {
                         _msg.MSH_line = line;
                         _msg.MSH_split = lineSplit;
-                      
+
                     }
                     else if (lineSplit[0] == "PID")
                     {
+                        string[] p_name = lineSplit[ 5 ].Split( '^' );
+
+                        if (p_name.Count() >= 2)
+                        {
+                            String f_name = p_name[0].Trim();
+                            String l_name = p_name[1].Trim();
+                            var r = new Regex(@"\d+"); // если в имени нет числа то обрабатываем
+                            if (!r.IsMatch(f_name) && !r.IsMatch(l_name) && !f_name.ToLower().Contains("proficiency") &&
+                                 !l_name.ToLower().Contains("proficiency"))
+                            {
+                                _msg.bad_pid_name = false;
+                            }
+                        }
+ 
                         lineSplit[10] = "U";  //1. PID10.1 - put letter U
                         lineSplit[22] = "U";  //2. PID22.1 - put letter U
-                        
+
                         _msg.PID_split = lineSplit;
                         _msg.PID_line = String.Join("|", lineSplit);
+                        _msg.pid_id = lineSplit[2];
+                        _msg.pid_year = !String.IsNullOrEmpty(lineSplit[7]) ? CalculateAge(DateTime.ParseExact(lineSplit[7], "yyyyMMdd", CultureInfo.InvariantCulture), DateTime.Now) : 150;
                     }
                 }
 
@@ -107,6 +130,7 @@ namespace cmdHL7Parse
                 }
 
             }
+            return _msg;
         }
 
         private static OBR GetOBR(string OBR_block)
@@ -153,7 +177,9 @@ namespace cmdHL7Parse
                     {
                         var _obx = new OBX();
                         _obx.OBX_heder = new StringReader(OBX_item).ReadLine();
-                        _obx.OBX_split_heder = _obx.OBX_heder.Split('|'); 
+                        _obx.OBX_split_heder = _obx.OBX_heder.Split('|');
+                        _obx.abnormal_flag = _obx.OBX_split_heder[8];
+                        _obx.obx_id = _obx.OBX_split_heder[3].Split('^')[0];
 
                         _zlr.OBXs.Add(_obx);
                     }
@@ -199,6 +225,13 @@ namespace cmdHL7Parse
             if (str.Length > 0) list.Add(str);
 
             return list;
+        }
+
+        static int CalculateAge(DateTime birthDate, DateTime now)
+        {
+            int age = now.Year - birthDate.Year;
+            if (now.Month < birthDate.Month || (now.Month == birthDate.Month && now.Day < birthDate.Day)) age--;
+            return age;
         }
 
     }
