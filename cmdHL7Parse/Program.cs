@@ -92,41 +92,18 @@ namespace cmdHL7Parse
             return result;
         }
 
-    //    static List<string> _obx = new List<string>();
         static List<string> temp_log = new List<string>();
         static List<H_MSG> history = History.ParseMSG("History.hl7");
 
         private static void GetData( List<MSG> msg )
         {
-            int countMsg = msg.Count;
-
-            /*        foreach ( var line in Config() )
-            {
-                var pid_ids =
-                    HL7.get_obxs( msg )
-                        .Where( w => w.obx_id == line.key && w.abnormal_flag == line.flag )
-                        .Select( s => new { s.ZLR1.OBR1.MSG1.pid_id, s.obx_id , s.ZLR1.OBR1.MSG1.pid_year, s.abnormal_flag } )
-                        .Distinct();
-
-                foreach ( var id in pid_ids )
-                {
-                    _obx.Clear();
-                    temp_log.Clear();
-                    var h = history.Where(w => w.pid_id == id.pid_id && line.extension_test.Contains(w.obx_id) && w.delete == false);
-
-                    if (((line.key == id.obx_id && line.flag == id.abnormal_flag) || h.Any()) && (line.year_limit == -1 || id.pid_year <= line.year_limit))
-                    {
-                        CheckResults( msg.Where( w => w.pid_id == w.pid_id ).ToList(), line, h );
-                    }
-                }
-            }*/
+            int countMsg = msg.Count(w => w.bad_pid_name == false);
 
             foreach ( var line in Config() )
             {
                 int a = 0;//, pr = 0;
                 foreach (var msg_item in msg.Where(w => w.bad_pid_name == false))
                 {
-                    //                 _obx.Clear();
                     temp_log.Clear();
                     foreach ( var obr_item in msg_item.OBRs )
                     {
@@ -211,16 +188,12 @@ namespace cmdHL7Parse
                                 /* obx_item.OBX_split_heder[3]*/
                                 tmp_[3] = String.Join("^", ObservationIdentifier);
 
-                               // if (!_obx.Contains(id_test))
-                               // {
                                 if ( !obx_item.is_loged )
                                 {
                                     logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ) +
                                               Environment.NewLine;
                                     obx_item.is_loged = true;
                                 }
-                                //  _obx.Add(id_test);
-                                //}
                             }
                         }
 
@@ -231,8 +204,11 @@ namespace cmdHL7Parse
                                             zlr_item.ZLR_heder + Environment.NewLine + logobx;
 
                             string[] address = msg_item.PID_split[11].Split(new char[] { '^' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (address.Length < 4)
-                                errlog(msgstr);
+                            
+                            if ( address.Length < 4 )
+                            {
+                                errlog( msgstr );
+                            }
 
                             //log(msgstr);
                             temp_log.Add(msgstr);
@@ -276,22 +252,6 @@ namespace cmdHL7Parse
             StreamWriter sw = new StreamWriter(fileNameHistory, false);
             sw.WriteLine(msg);
             sw.Close();
-
-          /*  if (File.Exists(fileNameHistory))
-            {
-                if (!File.ReadAllLines(fileNameHistory).Contains(msg))
-                {
-                    StreamWriter sw = new StreamWriter(fileNameHistory, true);
-                    sw.WriteLine(msg);
-                    sw.Close();
-                }
-            }
-            else
-            {
-                StreamWriter sw = new StreamWriter(fileNameHistory, true);
-                sw.WriteLine(msg);
-                sw.Close();
-            }*/
         }
 
         static void log(string msg)
