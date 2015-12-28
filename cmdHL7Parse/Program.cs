@@ -50,8 +50,8 @@ namespace cmdHL7Parse
             }
             FileName = args[ 0 ];
 
-      //     FileName = "rprresult_201519Th_080030 - копия.exp";
-       //     FileName = "rprresult_201520Fr_080032 - копия.exp";
+   //         FileName = "rprresult_201519Th_080030 - копия.exp";
+   //         FileName = "RPRresult(3).exp";
             var dd = HL7.ParseMSG( FileName );
     //        GetDataFromHistory( dd );
             GetData( dd );
@@ -82,7 +82,7 @@ namespace cmdHL7Parse
                 config_line.key = configkay[0];
                 config_line.flag = configkay[1];
                 config_line.extension_test = cline_split[1].Contains('^') ? cline_split[1].Split('^') : cline_split[1].Split('#');
-                config_line.any_test = cline_split[1].Contains('^');
+                config_line.any_test = cline_split[1].Contains('^') || config_line.extension_test.Count() == 1;
                 config_line.year_limit = cline_split.Count() > 2 ? Convert.ToInt32(cline_split[2]) : -1;
                 config_line.PregnancyTest = cline_split.Count() == 4 ? cline_split[3].Split('^') : new string[] { };
                 
@@ -92,71 +92,91 @@ namespace cmdHL7Parse
             return result;
         }
 
-        static List<string> _obx = new List<string>();
+    //    static List<string> _obx = new List<string>();
         static List<string> temp_log = new List<string>();
         static List<H_MSG> history = History.ParseMSG("History.hl7");
-        private static void GetData(List<MSG> msg)
-        {
-            int a = 0, countMsg = msg.Count, pr = 0;
 
-        /*    foreach (var line in Config())
+        private static void GetData( List<MSG> msg )
+        {
+            int countMsg = msg.Count;
+
+            /*        foreach ( var line in Config() )
             {
-                var test = msg.Where(w => w.bad_pid_name == false && w.OBRs.)
+                var pid_ids =
+                    HL7.get_obxs( msg )
+                        .Where( w => w.obx_id == line.key && w.abnormal_flag == line.flag )
+                        .Select( s => new { s.ZLR1.OBR1.MSG1.pid_id, s.obx_id , s.ZLR1.OBR1.MSG1.pid_year, s.abnormal_flag } )
+                        .Distinct();
+
+                foreach ( var id in pid_ids )
+                {
+                    _obx.Clear();
+                    temp_log.Clear();
+                    var h = history.Where(w => w.pid_id == id.pid_id && line.extension_test.Contains(w.obx_id) && w.delete == false);
+
+                    if (((line.key == id.obx_id && line.flag == id.abnormal_flag) || h.Any()) && (line.year_limit == -1 || id.pid_year <= line.year_limit))
+                    {
+                        CheckResults( msg.Where( w => w.pid_id == w.pid_id ).ToList(), line, h );
+                    }
+                }
             }*/
 
-
-            foreach (var msg_item in msg.Where(w => w.bad_pid_name == false))
+            foreach ( var line in Config() )
             {
-                _obx.Clear();
-                temp_log.Clear();
-
-                foreach (var obr_item in msg_item.OBRs)
+                int a = 0;//, pr = 0;
+                foreach (var msg_item in msg.Where(w => w.bad_pid_name == false))
                 {
-                    foreach (var zlr_item in obr_item.ZLRs)
+                    //                 _obx.Clear();
+                    temp_log.Clear();
+                    foreach ( var obr_item in msg_item.OBRs )
                     {
-                        foreach (var obx_item in zlr_item.OBXs)
+                        foreach ( var zlr_item in obr_item.ZLRs )
                         {
-                            foreach (var line in Config())
+                            foreach ( var obx_item in zlr_item.OBXs )
                             {
-                                var h = history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key && w.abnormal_flag == line.flag && w.delete == false);
+                                var h =
+                                    history.Where(
+                                        w =>
+                                            w.pid_id == msg_item.pid_id && line.extension_test.Contains( w.obx_id ) &&
+                                            w.delete == false );
 
-                                if (((line.key == obx_item.obx_id && line.flag == obx_item.abnormal_flag) || h.Any()) && (line.year_limit == -1 || msg_item.pid_year <= line.year_limit))
+                                if ( ( ( line.key == obx_item.obx_id && line.flag == obx_item.abnormal_flag ) || h.Any() ) &&
+                                     ( line.year_limit == -1 || msg_item.pid_year <= line.year_limit ) )
                                 {
-                                    CheckResults(msg, msg_item.pid_id, line, history.Where(w => w.pid_id == msg_item.pid_id && w.obx_id == line.key));
+                                    CheckResults( msg.Where( w => w.pid_id == msg_item.pid_id ).ToList(), line, h );
                                 }
                             }
                         }
                     }
-                }
 
+                    int d = 100*++a/countMsg;
 
-                int d = 100 * ++a / countMsg;
-
-                if (d != pr)
-                {
-                    Console.WriteLine(d + "%");
-                    pr = d;
+               //     if ( d != pr )
+             //       {
+                        Console.WriteLine( d + "%" );
+              //          pr = d;
+              //      }
                 }
             }
 
-            Historylog(String.Join(Environment.NewLine, history.Where(w => w.delete == false).Select(s => s.MSH_Block).ToArray()));
+            Historylog( String.Join( Environment.NewLine,
+                history.Where( w => w.delete == false ).Select( s => s.MSH_Block ).ToArray() ) );
         }
 
 
-        static void CheckResults(List<MSG> msg, string pid, ConfigParse config_line, IEnumerable<H_MSG> _history)
+        static void CheckResults(List<MSG> msg,  ConfigParse config_line, IEnumerable<H_MSG> _history)
         {
             var keys = GetConfig().Select( s => s.Split( '|' )[ 0 ].Split( '^' )[ 0 ] ).ToArray();
 
-            for (int i = 0; i < _history.Count(); ++i)
-                {
-                    temp_log.Add(_history.ElementAt(i).MSH_Block);
-                    _history.ElementAt(i).delete = true;
-                }
-           
-
-            foreach (var msg_item in msg.Where(w => w.pid_id == pid))
+            foreach (var item in _history)
             {
-                bool pt = PregnancyTest(config_line.PregnancyTest, msg_item.OBRs);
+                temp_log.Add( item.MSH_Block );
+                item.delete = true;
+            }
+
+            foreach (var msg_item in msg)
+            {
+                bool pt = PregnancyTest(config_line.PregnancyTest, msg_item.OBRs.ToList());
 
                 foreach (var obr_item in msg_item.OBRs)
                 {
@@ -191,12 +211,16 @@ namespace cmdHL7Parse
                                 /* obx_item.OBX_split_heder[3]*/
                                 tmp_[3] = String.Join("^", ObservationIdentifier);
 
-                                if (!_obx.Contains(id_test))
+                               // if (!_obx.Contains(id_test))
+                               // {
+                                if ( !obx_item.is_loged )
                                 {
-                                    logobx += String.Join("|", /*obx_item.OBX_split_heder*/tmp_) +
+                                    logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ) +
                                               Environment.NewLine;
-                                    _obx.Add(id_test);
+                                    obx_item.is_loged = true;
                                 }
+                                //  _obx.Add(id_test);
+                                //}
                             }
                         }
 
@@ -206,15 +230,12 @@ namespace cmdHL7Parse
                                             Environment.NewLine + obr_item.OBR_line + Environment.NewLine +
                                             zlr_item.ZLR_heder + Environment.NewLine + logobx;
 
-                            string[] address = msg_item.PID_split[11].Split(new char[] { '^' },
-                                StringSplitOptions.RemoveEmptyEntries);
+                            string[] address = msg_item.PID_split[11].Split(new char[] { '^' }, StringSplitOptions.RemoveEmptyEntries);
                             if (address.Length < 4)
                                 errlog(msgstr);
 
                             //log(msgstr);
                             temp_log.Add(msgstr);
-
-                            //      Historylog(msg_item.PID_split[2] + "|" + test);
                         }
                     }
                 }

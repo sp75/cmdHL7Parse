@@ -10,3 +10,6 @@ C:\MyWebApplication\4iB\cmdHL7Parse\cmdHL7Parse\bin\Debug\cmdHL7Parse.pdb
 C:\MyWebApplication\4iB\cmdHL7Parse\cmdHL7Parse\obj\x86\Debug\cmdHL7Parse.csprojResolveAssemblyReference.cache
 C:\4iB\cmdHL7Parse\cmdHL7Parse\obj\x86\Debug\cmdHL7Parse.exe
 C:\4iB\cmdHL7Parse\cmdHL7Parse\obj\x86\Debug\cmdHL7Parse.pdb
+C:\4iB\cmdHL7Parse\cmdHL7Parse\obj\x86\Debug\cmdHL7Parse.csprojResolveAssemblyReference.cache
+C:\4iB\cmdHL7Parse\cmdHL7Parse\bin\Debug\cmdHL7Parse.exe
+C:\4iB\cmdHL7Parse\cmdHL7Parse\bin\Debug\cmdHL7Parse.pdb

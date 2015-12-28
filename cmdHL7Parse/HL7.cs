@@ -16,12 +16,14 @@ namespace cmdHL7Parse
         public string[] PID_split { get; set; }
         public string pid_id { get; set; }
         public int pid_year { get; set; }
-        public List<OBR> OBRs { get; set; }
         public bool bad_pid_name { get; set; }
+
         public MSG()
         {
-            OBRs = new List<OBR>();
+            this.OBRs = new HashSet<OBR>();
         }
+
+        public virtual ICollection<OBR> OBRs { get; set; }
     }
 
     public class OBR
@@ -29,24 +31,29 @@ namespace cmdHL7Parse
         public string OBR_line { get; set; }
         public string[] OBR_split { get; set; }
         public List<string> NTE_list { get; set; }
-        public List<ZLR> ZLRs { get; set; }
+        public virtual MSG MSG1 { get; set; }
+
         public OBR()
         {
-            ZLRs = new List<ZLR>();
+            this.ZLRs = new HashSet<ZLR>();
             NTE_list = new List<string>();
         }
+
+        public virtual ICollection<ZLR> ZLRs { get; set; }
     }
 
     public class ZLR
     {
         public String ZLR_heder { get; set; }
         public string[] ZLR_split { get; set; }
-        public List<OBX> OBXs { get; set; }
-       
+        public virtual OBR OBR1 { get; set; }
+
         public ZLR()
         {
-            OBXs = new List<OBX>();
+            this.OBXs = new HashSet<OBX>();
         }
+
+        public virtual ICollection<OBX> OBXs { get; set; }
     }
 
     public class OBX
@@ -55,6 +62,9 @@ namespace cmdHL7Parse
         public string[] OBX_split_heder { get; set; }
         public string abnormal_flag { get; set; }
         public string obx_id { get; set; }
+        public bool is_loged { get; set; }
+
+        public virtual ZLR ZLR1 { get; set; }
     }
 
     public static class HL7
@@ -124,9 +134,11 @@ namespace cmdHL7Parse
                 }
 
                 var OBR_lines = GetBlock(MSG, "OBR");
-                foreach (var OBR in OBR_lines)
+                foreach ( var OBR in OBR_lines )
                 {
-                    _msg.OBRs.Add(GetOBR(OBR));
+                    var _obr = GetOBR( OBR );
+                    _obr.MSG1 = _msg;
+                    _msg.OBRs.Add( _obr );
                 }
 
             }
@@ -171,6 +183,7 @@ namespace cmdHL7Parse
                                                            //6. ZLR1.4 - put the same value as ZLR3.4
                                                            //7. ZLR1.5 - put the same value as ZLR3.5 
                     _zlr.ZLR_heder = String.Join( "|", _zlr.ZLR_split );
+                    _zlr.OBR1 = _obr;
   
                     var OBX_lines = GetBlock(ZLR_item, "OBX");
                     foreach (var OBX_item in OBX_lines)
@@ -180,7 +193,9 @@ namespace cmdHL7Parse
                         _obx.OBX_split_heder = _obx.OBX_heder.Split('|');
                         _obx.abnormal_flag = _obx.OBX_split_heder[8];
                         _obx.obx_id = _obx.OBX_split_heder[3].Split('^')[0];
+                        _obx.is_loged = false;
 
+                        _obx.ZLR1 = _zlr;
                         _zlr.OBXs.Add(_obx);
                     }
                     _obr.ZLRs.Add(_zlr);
@@ -232,6 +247,26 @@ namespace cmdHL7Parse
             int age = now.Year - birthDate.Year;
             if (now.Month < birthDate.Month || (now.Month == birthDate.Month && now.Day < birthDate.Day)) age--;
             return age;
+        }
+
+        public static List<OBX> get_obxs(List<MSG> msg)
+        {
+            var result = new List<OBX>();
+            foreach ( var msg_item in msg.Where( w => w.bad_pid_name == false ) )
+            {
+                foreach ( var obr_item in msg_item.OBRs )
+                {
+                    foreach ( var zlr_item in obr_item.ZLRs )
+                    {
+                        foreach ( var obx_item in zlr_item.OBXs )
+                        {
+                            result.Add(obx_item);
+                        }
+                    }
+                }
+            }
+
+            return result;
         }
 
     }
