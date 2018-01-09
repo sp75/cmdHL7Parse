@@ -92,7 +92,7 @@ namespace cmdHL7Parse
         private static MSG GetMSH(string MSG)
         {
             MSG _msg = new MSG();
-            _msg.bad_pid_name = true;
+            _msg.bad_pid_name = false;
 
             using (StringReader reader = new StringReader(MSG))
             {
@@ -115,11 +115,11 @@ namespace cmdHL7Parse
                         {
                             String f_name = p_name[0].Trim();
                             String l_name = p_name[1].Trim();
-                            var r = new Regex(@"\d+"); // если в имени нет числа то обрабатываем
-                            if (!r.IsMatch(f_name) && !r.IsMatch(l_name) && !f_name.ToLower().Contains("proficiency") &&
-                                 !l_name.ToLower().Contains("proficiency"))
+                           // var r = new Regex(@"\d+"); // если в имени нет числа то обрабатываем
+                            var r = new Regex(@"[A-Za-z]+"); // если есть хотфби одна буква
+                            if (!r.IsMatch(f_name) || !r.IsMatch(l_name) || f_name.ToLower().Contains("proficiency") || l_name.ToLower().Contains("proficiency"))
                             {
-                                _msg.bad_pid_name = false;
+                                _msg.bad_pid_name = true;
                             }
                         }
  

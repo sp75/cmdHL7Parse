@@ -51,7 +51,7 @@ namespace cmdHL7Parse
             FileName = args[ 0 ];
 
    //         FileName = "rprresult_201519Th_080030 - копия.exp";
-   //         FileName = "RPRresult(3).exp";
+    //        FileName = "RPRresult.exp";
             var dd = HL7.ParseMSG( FileName );
     //        GetDataFromHistory( dd );
             GetData( dd );
