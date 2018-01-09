@@ -159,6 +159,10 @@ namespace cmdHL7Parse
                     if (lineSplit[0] == "OBR")
                     {
                         lineSplit[22] = lineSplit[14]; //3. OBR22.1 - put the same value as in OBR14.1
+                        if ((lineSplit[4].Split('^')[0] == "5117" || lineSplit[4].Split('^')[0] == "5119") && lineSplit[15] == "S&Serum")
+                        {
+                            lineSplit[15] = "U&Urine";
+                        }
 
                         _obr.OBR_line = String.Join( "|", lineSplit );
                         _obr.OBR_split = lineSplit;
