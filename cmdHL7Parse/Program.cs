@@ -50,10 +50,10 @@ namespace cmdHL7Parse
             }
             FileName = args[ 0 ];
 
-   //         FileName = "rprresult_201519Th_080030 - копия.exp";
-    //        FileName = "RPRresult.exp";
+    //        FileName = "rprresult_201822Mo_133802.exp";
+
             var dd = HL7.ParseMSG( FileName );
-    //        GetDataFromHistory( dd );
+
             GetData( dd );
 
             Console.WriteLine( "" );
@@ -190,7 +190,7 @@ namespace cmdHL7Parse
 
                                 if ( !obx_item.is_loged )
                                 {
-                                    logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ) +
+                                    logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ).Replace("Lenco^33D1012663^CLIA", "33D1012663^Lenco^CLIA") +
                                               Environment.NewLine;
                                     obx_item.is_loged = true;
                                 }
