@@ -11,10 +11,15 @@ namespace cmdHL7Parse
     {
         public String key { get; set; }
         public String flag { get; set; }
-        public String[] extension_test { get; set; }
+        public List<extension_test> extension_tests { get; set; }
         public bool any_test { get; set; }
         public int year_limit { get; set; }
         public String[] PregnancyTest { get; set; }
+    }
+    public class extension_test
+    {
+        public string panel_id { get; set; }
+        public string OBR15 { get; set; }
     }
 
 
@@ -48,9 +53,9 @@ namespace cmdHL7Parse
                 Console.WriteLine( "ERROR: File config.ini doesn't exist" );
                 return;
             }
-            FileName = args[ 0 ];
+        //    FileName = args[ 0 ];*/
 
-    //        FileName = "rprresult_201822Mo_133802.exp";
+            FileName = "rprresult_201822Mo_133802.exp";
 
             var dd = HL7.ParseMSG( FileName );
 
@@ -78,14 +83,19 @@ namespace cmdHL7Parse
 
                 string[] cline_split = line.Split('|');
                 string[] configkay = cline_split[0].Split('^');
-                
+
                 config_line.key = configkay[0];
                 config_line.flag = configkay[1];
-                config_line.extension_test = cline_split[1].Contains('^') ? cline_split[1].Split('^') : cline_split[1].Split('#');
-                config_line.any_test = cline_split[1].Contains('^') || config_line.extension_test.Count() == 1;
+                var extension_tests = cline_split[1].Contains('^') ? cline_split[1].Split('^') : cline_split[1].Split('#');
+                config_line.extension_tests = extension_tests.Select(s => new extension_test
+                {
+                    panel_id = s.Any(an => an == '(') ? s.Substring(0, s.IndexOf('(')) : s,
+                    OBR15 = s.Contains('(') ? s.Substring(s.IndexOf('(') + 1, s.IndexOf(')') - s.IndexOf('(')-1) : ""
+                }).ToList();
+                config_line.any_test = cline_split[1].Contains('^') || config_line.extension_tests.Count() == 1;
                 config_line.year_limit = cline_split.Count() > 2 ? Convert.ToInt32(cline_split[2]) : -1;
                 config_line.PregnancyTest = cline_split.Count() == 4 ? cline_split[3].Split('^') : new string[] { };
-                
+
                 result.Add(config_line);
             }
 
@@ -114,7 +124,7 @@ namespace cmdHL7Parse
                                 var h =
                                     history.Where(
                                         w =>
-                                            w.pid_id == msg_item.pid_id && line.extension_test.Contains( w.obx_id ) &&
+                                            w.pid_id == msg_item.pid_id && line.extension_tests.Any(an=> an.panel_id == w.obx_id ) &&
                                             w.delete == false );
 
                                 if ( ( ( line.key == obx_item.obx_id && line.flag == obx_item.abnormal_flag ) || h.Any() ) &&
@@ -173,7 +183,7 @@ namespace cmdHL7Parse
                             }
 
                             var tmp_ = obx_item.OBX_split_heder.ToArray();
-                            if (config_line.extension_test.Contains(id_test))
+                            if (config_line.extension_tests.Select(s=> s.panel_id).Contains(id_test))
                             {
                                 String oi_1 = ObservationIdentifier[0];
                                 String oi_4 = ObservationIdentifier[3];
@@ -193,6 +203,12 @@ namespace cmdHL7Parse
                                     logobx += String.Join( "|", /*obx_item.OBX_split_heder*/tmp_ ).Replace("Lenco^33D1012663^CLIA", "33D1012663^Lenco^CLIA") +
                                               Environment.NewLine;
                                     obx_item.is_loged = true;
+                                }
+
+                                var i = config_line.extension_tests.FirstOrDefault(w => w.panel_id == id_test);
+                                if (i != null && !string.IsNullOrEmpty(i.OBR15))
+                                {
+                                    obr_item.OBR_split[15] = i.OBR15;
                                 }
                             }
                         }
@@ -219,7 +235,7 @@ namespace cmdHL7Parse
 
             var str = String.Join(Environment.NewLine, temp_log.ToArray());
 
-            if (temp_log.Count() != config_line.extension_test.Count() && !config_line.any_test)
+            if (temp_log.Count() != config_line.extension_tests.Count() && !config_line.any_test)
             {
                 history.Add(new H_MSG() { MSH_Block = str, delete = false });
             }
